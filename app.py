@@ -7,24 +7,34 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Simulador Monte Carlo", layout="wide")
 st.title("📈 Simulador de Escenarios Financieros (Monte Carlo)")
 
+# 1. DICCIONARIOS DE ACTIVOS PREDEFINIDOS
+diccionario_activos = {
+    "Acción": ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL", "META", "NFLX", "COIN"],
+    "ETF": ["SPY", "QQQ", "VOO", "DIA", "IWM", "VTI", "KORU"],
+    "Criptomoneda": ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD"]
+}
+
 # Barra lateral para los controles
 st.sidebar.header("Configuración de Parámetros")
 tipo_activo = st.sidebar.selectbox("Tipo de Activo", ["Acción", "ETF", "Criptomoneda"])
-# Forzamos a que el ticker esté en mayúsculas
-ticker = st.sidebar.text_input("Ticker (Ej: AAPL, SPY, BTC-USD)", value="AAPL").upper()
+
+# 2. SELECTOR DESPLEGABLE CON BUSCADOR (Reemplaza al text_input)
+ticker = st.sidebar.selectbox(
+    "Selecciona el Ticker (puedes escribir para buscar)", 
+    options=diccionario_activos[tipo_activo]
+)
+
 dias = st.sidebar.slider("Días a predecir", min_value=10, max_value=365, value=120)
 simulaciones = st.sidebar.slider("Número de simulaciones", min_value=50, max_value=500, value=100)
 
 if st.sidebar.button("Ejecutar Simulación"):
     with st.spinner("Descargando datos y calculando trayectorias..."):
         try:
-            # MÉTODO ACTUALIZADO MÁS ESTABLE
             activo = yf.Ticker(ticker)
             data = activo.history(period="1y")
             
-            # Validación por si Yahoo Finance no devuelve datos
             if data.empty:
-                st.error(f"No se encontraron datos en Yahoo Finance para el ticker '{ticker}'. Verifica el símbolo.")
+                st.error(f"No se encontraron datos en Yahoo Finance para el ticker '{ticker}'.")
             else:
                 precios_cierre = data['Close']
                 precio_actual = float(precios_cierre.iloc[-1])
@@ -34,7 +44,6 @@ if st.sidebar.button("Ejecutar Simulación"):
                 drift = rendimientos_diarios.mean() - (0.5 * rendimientos_diarios.var())
                 volatilidad = rendimientos_diarios.std()
 
-                # Extraer valores numéricos de forma segura
                 drift_val = drift.values[0] if hasattr(drift, 'values') else drift
                 vol_val = volatilidad.values[0] if hasattr(volatilidad, 'values') else volatilidad
 
@@ -54,16 +63,28 @@ if st.sidebar.button("Ejecutar Simulación"):
                 ax.set_title(f"Simulación para {ticker} ({simulaciones} escenarios)")
                 ax.set_xlabel("Días")
                 ax.set_ylabel("Precio ($)")
+                
+                # Mejorar el formato de los números en el eje Y de la gráfica
+                ax.get_yaxis().set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
+                
                 ax.grid(True, alpha=0.3)
                 st.pyplot(fig)
 
-                # Panel de Resultados
+                # 3. PANEL DE RESULTADOS CON FORMATO MEJORADO
                 precios_finales = trayectorias[-1]
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Precio Actual", f"${precio_actual:.2f}")
-                col2.metric("Precio Esperado (Promedio)", f"${np.mean(precios_finales):.2f}")
-                col3.metric("Escenario Pesimista (P5)", f"${np.percentile(precios_finales, 5):.2f}")
+                precio_promedio = np.mean(precios_finales)
+                p5 = np.percentile(precios_finales, 5)
+                p95 = np.percentile(precios_finales, 95)
+                
+                st.divider()
+                st.subheader("📊 Resultados Proyectados")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                # El formato :,.2f es el que añade las comas de miles y 2 decimales
+                col1.metric("Precio Actual", f"${precio_actual:,.2f}")
+                col2.metric("Precio Esperado (Promedio)", f"${precio_promedio:,.2f}")
+                col3.metric("Escenario Pesimista (P5)", f"${p5:,.2f}")
+                col4.metric("Escenario Optimista (P95)", f"${p95:,.2f}")
 
         except Exception as e:
-            # SI FALLA, AHORA MOSTRARÁ EL ERROR REAL
             st.error(f"Error técnico detallado: {e}")
